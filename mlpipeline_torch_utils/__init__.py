@@ -485,15 +485,27 @@ def crop_to_box(img, size):
     img = cv2.resize(img, (size, size))
     return img
 
-    
+class log_with_temp_file():
+    def __init__(self, file_path, log_fn):
+        self.file_path = file_path
+        self.log_fn = log_fn
+        open(self.file_path, "w")
+        
+    def __call__(self, message, *args, **kwargs):
+        log(message, *args, **kwargs)
+        with open(self.file_path, "a") as f:
+            f.write(str(message) + "\n")
+
+
 def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_threshold = 0.1, calc_negative_class = False, multi_image = False, show_wrongs = False):
     assert torch_available
     assert cv2_available
+    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output", log)
     classes_, used_labels, predict_on_model = predict_on_model(multi_image = multi_image)
     classes_reversed_ = {v:k for k,v in classes_.items()}
-    log(used_labels)
+    log_fn(used_labels)
     classes_ = {c:classes_[c] for c in [classes_reversed_[c_] for c_ in used_labels]}
-    log("Classes: {}".format(classes_))
+    log_fn("Classes: {}".format(classes_))
     exact_mathch = 0
     hemming = 0
     accuracy = 0
@@ -507,9 +519,9 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
     count_total_average = 0
 
     combinations_performance = list(itertools.combinations(used_labels, 2))
-    log("Number of combinations: {}".format(len(combinations_performance)))
+    log_fn("Number of combinations: {}".format(len(combinations_performance)))
     combinations_performance = {k:[0,0] for k in combinations_performance}
-    log("Number of images being evaled: {}".format(len(json_in)))
+    log_fn("Number of images being evaled: {}".format(len(json_in)))
     calced = 0
     i_ = 0
     for idx,row in tqdm(enumerate(json_in)):
@@ -522,11 +534,11 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         gt_labels = row[1]
         if len(gt_labels) == 0:
             gt_labels = {'None':0}
-        #log(gt_labels, classes_, 111111111111111111111111111)
+        #log_fn(gt_labels, classes_, 111111111111111111111111111)
         try:
             for l in gt_labels.keys():
                 if int(l) not in classes_:
-                    #log("row")
+                    #log_fn("row")
                     raise Exception()
         except:
             if calc_negative_class:
@@ -546,7 +558,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
             if multi_image:
                 x_classify, x_count, x_count_total, x_classify_aux = predict_on_model(img)
             else:
-                log( "\n----{}".format(en(img)))
+                log_fn( "\n----{}".format(en(img)))
                 # for some reason this sections has a memory leak
                 for im in img:
                     x_classify_, x_count_, x_count_total_, x_classify_aux_ = predict_on_model(im)
@@ -586,14 +598,14 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         else:
             count = None
         result = []
-        #log(x_classify)
+        #log_fn(x_classify)
         try:
             if calc_negative_class:
                 gt_labels = {classes_[int(l)]:c for l,c in gt_labels.items() if int(l) in classes_}#set(gt_labels.keys())
             else:
                 gt_labels = {classes_[int(l)]:c for l,c in gt_labels.items()}
         except KeyError:
-            log(row, classes_, gt_labels)
+            log_fn(row, classes_, gt_labels)
             raise
         except:
             if 'None' in gt_labels:
@@ -621,8 +633,8 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                    # str(count[0,i].item())])
             except KeyError:
                 pass
-        # log(result, gt_labels, "\n")
-        # log(set([n for n,a,b in result]) == set(gt_labels.keys()))
+        # log_fn(result, gt_labels, "\n")
+        # log_fn(set([n for n,a,b in result]) == set(gt_labels.keys()))
         result_labels = set([n for n, _#,a,b,c
                              in result])
         if len(result_labels) == 0:
@@ -647,7 +659,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 
         intersection = result_labels.intersection(gt_labels)
         union = result_labels.union(gt_labels)
-        #log(intersection, union)
+        #log_fn(intersection, union)
         count_success = True
         for label in used_labels:
             tp = 0
@@ -655,7 +667,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
             tn = 0
             fn = 0
 
-            #log(gt_labels, result_labels,label)
+            #log_fn(gt_labels, result_labels,label)
             if label in gt_labels:
                 macro_matrics[label][4][1] += 1
                 if count is not None:
@@ -674,7 +686,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 tn = 1
 
             recall, precission, accuracy_confusion, accuracy_confusion_non_tn  = confusion_matrix_results(tp, fp, tn, fn)
-            #log(recall, precission, accuracy_confusion, accuracy_confusion_non_tn)
+            #log_fn(recall, precission, accuracy_confusion, accuracy_confusion_non_tn)
             micro_matrics[label][0] += tp
             micro_matrics[label][1] += fp
             micro_matrics[label][2] += tn
@@ -697,12 +709,12 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         if show_wrongs:
             if len(intersection)/len(gt_labels) < 1 or (not count_total_average_temp or not count_success):
                 cv2.imshow("", img)
-                log("\n {}\n {}\n {}\n {}".format(gt_labels, result_labels, result, result_gt_labels))
+                log_fn("\n {}\n {}\n {}\n {}".format(gt_labels, result_labels, result, result_gt_labels))
                 cv2.waitKey()
-        # log(x_classify.sort(descending = True))
+        # log_fn(x_classify.sort(descending = True))
         # max_index = x_classify.sort(descending = True)[1][0].cpu().numpy()
-        # log(max_index[0], "asdfasdfasdasdfasdfas")
-        # log([model_spec['data_codes_mapping'][idx] for idx in max_index])
+        # log_fn(max_index[0], "asdfasdfasdasdfasdfas")
+        # log_fn([model_spec['data_codes_mapping'][idx] for idx in max_index])
         calced += 1
         # x = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
         # x = cv2.resize(x, (7,35))
@@ -712,7 +724,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         # i_ += 1 
         # if i_ > 10:
         #     break
-    log("\nSKIPPED: {}".format(len(json_in) - calced))
+    log_fn("\nSKIPPED: {}".format(len(json_in) - calced))
     for k,v in micro_matrics.items():
         micro_matrics[k] = [x if x is not None else 0 for x in confusion_matrix_results(*v)]
 
@@ -757,17 +769,18 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                                                       macro_matrics[label][3])
         label_based_matrics += "\t\tCount: \t{}\t{:.4f}\n".format(None,
                                                                   macro_matrics[label][4])
-    log("exact_match: {}".format(exact_mathch/calced))
-    log("hemming:     {}".format(hemming/calced))
-    log("accuracy:    {}".format(accuracy/calced))
-    log("count total: {}".format(count_total_average))
-    log("count sparse:{}".format(count_sparse_average))
-    log(label_based_matrics)
+    log_fn("exact_match: {}".format(exact_mathch/calced))
+    log_fn("hemming:     {}".format(hemming/calced))
+    log_fn("accuracy:    {}".format(accuracy/calced))
+    log_fn("count total: {}".format(count_total_average))
+    log_fn("count sparse:{}".format(count_sparse_average))
+    log_fn(label_based_matrics)
     for comb, vals in combinations_performance.items():
         try:
-            log("{} :{}".format(comb, vals[0]/vals[1]))
+            log_fn("{} :{}".format(comb, vals[0]/vals[1]))
         except ZeroDivisionError:
-            log("{} : Irrelevent".format(comb))
+            log_fn("{} : Irrelevent".format(comb))
+    return log_fn.file_path
 
 def get_adjusted_count(count, count_total, class_out, prob_threshold = 0.1):
     #count = #torch.Tensor(count)
