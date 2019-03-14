@@ -757,13 +757,12 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                                                       macro_matrics[label][3])
         label_based_matrics += "\t\tCount: \t{}\t{:.4f}\n".format(None,
                                                                   macro_matrics[label][4])
-    log("exact_match: {}".format(exact_mathch/calced),
-          "hemming:     {}".format(hemming/calced),
-          "accuracy:    {}".format(accuracy/calced),
-          "count total: {}".format(count_total_average),
-          "count sparse:{}".format(count_sparse_average),
-          label_based_matrics,
-          sep="\n")
+    log("exact_match: {}".format(exact_mathch/calced))
+    log("hemming:     {}".format(hemming/calced))
+    log("accuracy:    {}".format(accuracy/calced))
+    log("count total: {}".format(count_total_average))
+    log("count sparse:{}".format(count_sparse_average))
+    log(label_based_matrics)
     for comb, vals in combinations_performance.items():
         try:
             log("{} :{}".format(comb, vals[0]/vals[1]))
