@@ -500,7 +500,7 @@ class log_with_temp_file():
 def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_threshold = 0.1, calc_negative_class = False, multi_image = False, show_wrongs = False):
     assert torch_available
     assert cv2_available
-    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output", log)
+    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output.txt", log)
     classes_, used_labels, predict_on_model = predict_on_model(multi_image = multi_image)
     classes_reversed_ = {v:k for k,v in classes_.items()}
     log_fn(used_labels)
@@ -509,15 +509,24 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
     exact_mathch = 0
     hemming = 0
     accuracy = 0
-    
+
+    # These dictionaries are used to keep track of the values which will
+    # be used to calculate the metrics we need
     micro_matrics = {k:[0,0,0,0] for k in used_labels}# tp, fp, tn, fn
-    macro_matrics = {k:[[0,0],[0,0],0, [0,0], [0,0]] for k in used_labels}# recall, prece, acc, acc_non_tn, [count eql, total]
+    macro_matrics = {k:[[0,0], # recall, 
+                        [0,0], # prece, 
+                        0, # acc, 
+                        [0,0],# acc_non_tn, 
+                        [0,0]] # [count eql, total]
+                     for k in used_labels}# recall, prece, acc, acc_non_tn, [count eql, total]
     if calc_negative_class:
         micro_matrics['None'] = [0,0,0,0]
         macro_matrics['None'] = [[0,0],[0,0],0, [0,0], [0,0]]
     used_labels_length = len(used_labels)
     count_total_average = 0
 
+    # Setting up the combintaion that need to be tracked.
+    # Generating the combinations and initializing the respective metrics
     combinations_performance = list(itertools.combinations(used_labels, 2))
     log_fn("Number of combinations: {}".format(len(combinations_performance)))
     combinations_performance = {k:[0,0] for k in combinations_performance}
@@ -528,13 +537,17 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         # if idx> 100:
         #     break
         if idx % 5000 == 0:
-            # Added to give the hardware some breaking time to cool down
+            # Added to give the hardware some breathing time to cool down
             time.sleep(3 * idx/10000)
         f = row[0]
         gt_labels = row[1]
+        # This is when we are using images which do not have a label
+        # Example: detecting negative classes
         if len(gt_labels) == 0:
             gt_labels = {'None':0}
-        #log_fn(gt_labels, classes_, 111111111111111111111111111)
+
+        # Testing if we are encountering any instances with no label
+        # if encountered, and calc_negative_class not true, will raise exception?
         try:
             for l in gt_labels.keys():
                 if int(l) not in classes_:
@@ -543,23 +556,30 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         except:
             if calc_negative_class:
                 # comment this out if considering images that are not in used labels
-                continue
+                # continue
                 pass
             else:
-                continue
-        classificatoin = []
-        count = []
-        x_classify, x_count, x_count_total, x_classify_aux = [None] * 4
+                # Should this be continue of raise?
+                raise
+            
+        # classificatoin = []
+        # count = []
+        
+        # The difference being if we are looking at singel image per data point or a scene(mulitiple images)
         if isinstance(f, str):
             img = cv2.imread(os.path.join(root_dir, f))
             x_classify, x_count, x_count_total, x_classify_aux = predict_on_model(img)
         elif isinstance(f, list):
             img = [cv2.imread(os.path.join(root_dir, f_[0])) for f_ in f]
             if multi_image:
+                # The multi image handling responsibility is passed to the predict_on_model function here
                 x_classify, x_count, x_count_total, x_classify_aux = predict_on_model(img)
             else:
+                # In case the predict_on_model does not handle the multi_image scenario
                 log_fn( "\n----{}".format(en(img)))
-                # for some reason this sections has a memory leak
+                # TODO: for some reason this sections has a memory leak, needs further investigation
+                # Initializing the values to None
+                x_classify, x_count, x_count_total, x_classify_aux = [None] * 4
                 for im in img:
                     x_classify_, x_count_, x_count_total_, x_classify_aux_ = predict_on_model(im)
                     try:
@@ -586,19 +606,21 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 x_classify_, x_count_, x_count_total_, x_classify_aux_ = [None] * 4
         #transformed_img = i[0].cuda()
 
+        # When the model outputs the count as well, calculate the count related metrics
+        count = None
         if x_count_total is not None:
             count = x_count_total.round_().squeeze().data.item()#.cpu().numpy()
             count_total_average_temp = int(count) == \
                 sum([item_count for _, item_count in gt_labels.items()])
             count_total_average += count_total_average_temp
+            # In the case where the models per item count metrics are also tracked
             if x_count is not None:
                 count = get_adjusted_count(x_count, x_count_total, x_classify, prob_threshold)
-            else:
-                count = None
-        else:
-            count = None
-        result = []
+
         #log_fn(x_classify)
+
+        # converting the gt_labels to use the string values of the class instead of the encoded integer value
+        # TODO: the non class case needs more care
         try:
             if calc_negative_class:
                 gt_labels = {classes_[int(l)]:c for l,c in gt_labels.items() if int(l) in classes_}#set(gt_labels.keys())
@@ -612,6 +634,8 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 gt_labels = {'None':0}
             raise
 
+        # Extracting the values for the class based metrics
+        result = []
         result_gt_labels = []
         for i in range(total_classes_count):
             if x_classify[0,i] > prob_threshold:
@@ -626,6 +650,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                    # str(x_count[0,i].round().detach().cpu().numpy()),
                                    # str(count[0,i].item())])
             try:
+                # Tracking the labels that went wrong
                 if classes_[i] in gt_labels and x_classify[0,i] <= prob_threshold:
                     result_gt_labels.append([classes_[i] ,
                                              str(x_classify[0,i].detach().cpu().numpy())])#,
@@ -635,32 +660,46 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 pass
         # log_fn(result, gt_labels, "\n")
         # log_fn(set([n for n,a,b in result]) == set(gt_labels.keys()))
+
+        # The results were used for historical reasons. Now extracting only the classes predicted.
         result_labels = set([n for n, _#,a,b,c
                              in result])
+
+        # When handling the no class cases
         if len(result_labels) == 0:
             result_labels = set(['None'])
-        
+
+        # This makes sense only if there is a label expected to be predicted.
         if 'None' not in gt_labels:
+            # Filter the combinations that are relevent to the ground truth labels
             current_combination_keys = [k for k in combinations_performance.keys() for k_1, k_2 in itertools.combinations(gt_labels.keys(), 2) if k_1 in k and k_2 in k]
 
-            key_to_comb_mapping = {}
-            for k in gt_labels.keys():
-                for comb in current_combination_keys:
-                    if k in comb:
-                        try:
-                            key_to_comb_mapping[k].append(comb)
-                        except:
-                            key_to_comb_mapping[k] = [comb]
+            # I have no idea why this is here!!
+            # key_to_comb_mapping = {}
+            # for k in gt_labels.keys():
+            #     for comb in current_combination_keys:
+            #         if k in comb:
+            #             try:
+            #                 key_to_comb_mapping[k].append(comb)
+            #             except:
+            #                 key_to_comb_mapping[k] = [comb]
 
+            # Increment the combinations relevent to the ground truth labels.
             for comb in current_combination_keys:
                 combinations_performance[comb][1] +=1
                 if comb[0] in result_labels and comb[1] in result_labels:
                     combinations_performance[comb][0] +=1
-                
+
+        # intersection and union between predicted labels and ground truth labels
         intersection = result_labels.intersection(gt_labels)
         union = result_labels.union(gt_labels)
         #log_fn(intersection, union)
+
+        # Used when displaying the images of that predicted wrongly.
         count_success = True
+
+        # Calculating the metrics for each label.
+        # Have to iterate through all the labels cz calculating the false negative, etc.
         for label in used_labels:
             tp = 0
             fp = 0
@@ -668,6 +707,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
             fn = 0
 
             #log_fn(gt_labels, result_labels,label)
+            # Updating the counts values in macro_matrics
             if label in gt_labels:
                 macro_matrics[label][4][1] += 1
                 if count is not None:
@@ -679,7 +719,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
             if label in gt_labels and label in result_labels:
                 tp = 1
             elif label in gt_labels and label not in result_labels:
-                fp = 1
+                fn = 1
             elif label not in gt_labels and label in result_labels:
                 fp = 1
             else:
@@ -703,11 +743,11 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 macro_matrics[label][3][0] += accuracy_confusion_non_tn
                 macro_matrics[label][3][1] += 1
 
-        exact_mathch += 1 if len([1 for l in result_labels if l in gt_labels]) > 0 else 0
+        exact_mathch += 1 if len([1 for l in used_labels if l in gt_labels and l in result_labels]) > 0 else 0
         hemming += (len(union) - len(intersection))/used_labels_length
         accuracy += len(intersection)/len(gt_labels)
         if show_wrongs:
-            if len(intersection)/len(gt_labels) < 1 or (not count_total_average_temp or not count_success):
+            if len(intersection)/len(gt_labels) != 1 or (not count_total_average_temp or not count_success):
                 cv2.imshow("", img)
                 log_fn("\n {}\n {}\n {}\n {}".format(gt_labels, result_labels, result, result_gt_labels))
                 cv2.waitKey()
@@ -783,24 +823,17 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
     return log_fn.file_path
 
 def get_adjusted_count(count, count_total, class_out, prob_threshold = 0.1):
-    #count = #torch.Tensor(count)
-    # class_filtered = class_out <= PROB_THRESHOLD
-    # count[class_filtered] = 0
-    # count = count / count.sum()
-    
     calced_counts  = (count * count_total)#.round()
     return_value = calced_counts#torch.zeros_like(calced_counts)
     return_value[class_out > prob_threshold] = torch.clamp(return_value[class_out > prob_threshold], min = 1).round()
     if count_total.round().sum().eq(return_value.sum()).item() == 0:
         np.set_printoptions(precision = 3, suppress = True)
-        # print(count_total, count.detach().cpu().numpy(), class_out.detach().cpu().numpy(), return_value, sep = "\n")
-        # print(count_total.round().sum(), return_value.sum())
-        # print(count_total.round().sum().eq(return_value.sum()), "*"*100)
     return return_value
 
 def confusion_matrix_results(tp,fp, tn, fn):
     '''
-return recall, prceision, accuracy
+return recall, prceision, accuracy, accuracy without counting the true
+    negeative
 '''
     try:
         recall = tp/(tp+fn)
