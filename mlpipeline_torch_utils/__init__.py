@@ -497,16 +497,16 @@ class log_with_temp_file():
             f.write(str(message) + "\n")
 
 
-def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_threshold = 0.1, calc_negative_class = False, multi_image = False, show_wrongs = False):
-    assert torch_available
-    assert cv2_available
-    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output.txt", log)
-    classes_, used_labels, predict_on_model = predict_on_model(multi_image = multi_image)
-    classes_reversed_ = {v:k for k,v in classes_.items()}
-    log_fn(used_labels)
-    classes_ = {c:classes_[c] for c in [classes_reversed_[c_] for c_ in used_labels]}
-    log_fn("Classes: {}".format(classes_))
-    exact_mathch = 0
+def _eval_model(log_fn, classes, used_labels,
+                json_in, predict_on_model, root_dir,
+                total_classes_count, prob_threshold = 0.1,
+                calc_negative_class = False, multi_image = False,
+                show_wrongs = False):
+    #classes, used_labels, predict_on_model =
+    #predict_on_model(multi_image = multi_image)
+    classes_reversed = {v:k for k,v in classes.items()}
+    classes = {c:classes[c] for c in [classes_reversed[c_] for c_ in used_labels]}
+    exact_match = 0
     hemming = 0
     accuracy = 0
 
@@ -528,9 +528,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
     # Setting up the combintaion that need to be tracked.
     # Generating the combinations and initializing the respective metrics
     combinations_performance = list(itertools.combinations(used_labels, 2))
-    log_fn("Number of combinations: {}".format(len(combinations_performance)))
     combinations_performance = {k:[0,0] for k in combinations_performance}
-    log_fn("Number of images being evaled: {}".format(len(json_in)))
     calced = 0
     i_ = 0
     for idx,row in tqdm(enumerate(json_in)):
@@ -550,7 +548,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         # if encountered, and calc_negative_class not true, will raise exception?
         try:
             for l in gt_labels.keys():
-                if int(l) not in classes_:
+                if int(l) not in classes:
                     #log_fn("row")
                     raise Exception()
         except:
@@ -623,11 +621,11 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         # TODO: the non class case needs more care
         try:
             if calc_negative_class:
-                gt_labels = {classes_[int(l)]:c for l,c in gt_labels.items() if int(l) in classes_}#set(gt_labels.keys())
+                gt_labels = {classes[int(l)]:c for l,c in gt_labels.items() if int(l) in classes}#set(gt_labels.keys())
             else:
-                gt_labels = {classes_[int(l)]:c for l,c in gt_labels.items()}
+                gt_labels = {classes[int(l)]:c for l,c in gt_labels.items()}
         except KeyError:
-            log_fn(row, classes_, gt_labels)
+            log_fn(row, classes, gt_labels)
             raise
         except:
             if 'None' in gt_labels:
@@ -640,7 +638,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         for i in range(total_classes_count):
             if x_classify[0,i] > prob_threshold:
                 try:
-                    result.append([classes_[i],
+                    result.append([classes[i],
                                    str(x_classify[0,i].detach().cpu().numpy())])
                                    # str(x_count[0,i].round().detach().cpu().numpy()),
                                    # str(count[0,i].item())])
@@ -651,8 +649,8 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                    # str(count[0,i].item())])
             try:
                 # Tracking the labels that went wrong
-                if classes_[i] in gt_labels and x_classify[0,i] <= prob_threshold:
-                    result_gt_labels.append([classes_[i] ,
+                if classes[i] in gt_labels and x_classify[0,i] <= prob_threshold:
+                    result_gt_labels.append([classes[i] ,
                                              str(x_classify[0,i].detach().cpu().numpy())])#,
                                    #           str(x_count[0,i].round().detach().cpu().numpy()),
                                    # str(count[0,i].item())])
@@ -711,7 +709,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
             if label in gt_labels:
                 macro_matrics[label][4][1] += 1
                 if count is not None:
-                    if count[0, classes_reversed_[label]] == gt_labels[label]:
+                    if count[0, classes_reversed[label]] == gt_labels[label]:
                         macro_matrics[label][4][0] += 1
                     else:
                         count_success = False
@@ -743,7 +741,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                 macro_matrics[label][3][0] += accuracy_confusion_non_tn
                 macro_matrics[label][3][1] += 1
 
-        exact_mathch += 1 if len([1 for l in used_labels if l in gt_labels and l in result_labels]) > 0 else 0
+        exact_match += 1 if len([1 for l in used_labels if l in gt_labels and l in result_labels]) > 0 else 0
         hemming += (len(union) - len(intersection))/used_labels_length
         accuracy += len(intersection)/len(gt_labels)
         if show_wrongs:
@@ -764,6 +762,22 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
         # i_ += 1 
         # if i_ > 10:
         #     break
+
+    return classes, combinations_performance, calced, exact_match, hemming, accuracy,\
+        count_total_average, macro_matrics, micro_matrics
+        
+def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_threshold = 0.1, calc_negative_class = False, multi_image = False, show_wrongs = False):
+    assert torch_available
+    assert cv2_available
+    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output.txt", log)
+    classes_, used_labels, predict_on_model = predict_on_model(multi_image = multi_image)
+    classes, combinations_performance, calced, exact_match, hemming, accuracy,\
+    count_total_average, macro_matrics, micro_matrics = _eval_model(log_fn, classes_, used_labels, json_in, predict_on_model, root_dir,
+                                                                    total_classes_count, prob_threshold, calc_negative_class, multi_image, show_wrongs)
+    log_fn("Used labels: {}".format(used_labels))
+    log_fn("Classes: {}".format(classes))
+    log_fn("Number of combinations: {}".format(len(combinations_performance)))
+    log_fn("Number of images being evaled: {}".format(len(json_in)))
     log_fn("\nSKIPPED: {}".format(len(json_in) - calced))
     for k,v in micro_matrics.items():
         micro_matrics[k] = [x if x is not None else 0 for x in confusion_matrix_results(*v)]
@@ -809,7 +823,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                                                       macro_matrics[label][3])
         label_based_matrics += "\t\tCount: \t{}\t{:.4f}\n".format(None,
                                                                   macro_matrics[label][4])
-    log_fn("exact_match: {}".format(exact_mathch/calced))
+    log_fn("exact_match: {}".format(exact_match/calced))
     log_fn("hemming:     {}".format(hemming/calced))
     log_fn("accuracy:    {}".format(accuracy/calced))
     log_fn("count total: {}".format(count_total_average))
