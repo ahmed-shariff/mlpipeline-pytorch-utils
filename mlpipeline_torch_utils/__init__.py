@@ -741,7 +741,9 @@ def _eval_model(log_fn, classes, used_labels,
                 macro_matrics[label][3][0] += accuracy_confusion_non_tn
                 macro_matrics[label][3][1] += 1
 
-        exact_match += 1 if len([1 for l in used_labels if l in gt_labels and l in result_labels]) > 0 else 0
+        exact_match += 1 if all([l in result_labels for l in gt_labels]) \
+            and all([l in gt_labels for l in results_label]) \
+            else 0
         hemming += (len(union) - len(intersection))/used_labels_length
         accuracy += len(intersection)/len(gt_labels)
         if show_wrongs:
