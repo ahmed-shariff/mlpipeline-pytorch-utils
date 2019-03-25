@@ -742,7 +742,7 @@ def _eval_model(log_fn, classes, used_labels,
                 macro_matrics[label][3][1] += 1
 
         exact_match += 1 if all([l in result_labels for l in gt_labels]) \
-            and all([l in gt_labels for l in results_label]) \
+            and all([l in gt_labels for l in result_label]) \
             else 0
         hemming += (len(union) - len(intersection))/used_labels_length
         accuracy += len(intersection)/len(gt_labels)
