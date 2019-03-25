@@ -742,7 +742,7 @@ def _eval_model(log_fn, classes, used_labels,
                 macro_matrics[label][3][1] += 1
 
         exact_match += 1 if all([l in result_labels for l in gt_labels]) \
-            and all([l in gt_labels for l in result_label]) \
+            and all([l in gt_labels for l in result_labels]) \
             else 0
         hemming += (len(union) - len(intersection))/used_labels_length
         accuracy += len(intersection)/len(gt_labels)
@@ -833,7 +833,7 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
     log_fn(label_based_matrics)
     for comb, vals in combinations_performance.items():
         try:
-            log_fn("{} :{}".format(comb, vals[0]/vals[1]))
+            log_fn("{} :{} ({})".format(comb, vals[0]/vals[1], vals[1]))
         except ZeroDivisionError:
             log_fn("{} : Irrelevent".format(comb))
     return log_fn.file_path
