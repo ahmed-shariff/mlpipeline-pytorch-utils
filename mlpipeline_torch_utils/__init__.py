@@ -496,7 +496,14 @@ class log_with_temp_file():
         with open(self.file_path, "a") as f:
             f.write(str(message) + "\n")
 
-
+def get_available_file_name(location, filename):
+    idx = 0
+    path = os.path.join(location, "{}-{}.txt".format(filename, idx))
+    while os.path.exists(path):
+        idx +=1
+        path = os.path.join(location, "{}-{}.txt".format(filename, idx))
+    return path
+            
 def _eval_model(log_fn, classes, used_labels,
                 json_in, predict_on_model, root_dir,
                 total_classes_count, prob_threshold = 0.1,
@@ -767,11 +774,11 @@ def _eval_model(log_fn, classes, used_labels,
 
     return classes, combinations_performance, calced, exact_match, hemming, accuracy,\
         count_total_average, macro_matrics, micro_matrics
-        
+
 def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_threshold = 0.1, calc_negative_class = False, multi_image = False, show_wrongs = False):
     assert torch_available
     assert cv2_available
-    log_fn = log_with_temp_file("/tmp/mlp_torch_util_eval_model_output.txt", log)
+    log_fn = log_with_temp_file(get_available_file_name("/tmp", "mlp_torch_util_eval_model_output.txt"), log)
     classes_, used_labels, predict_on_model = predict_on_model(multi_image = multi_image)
     classes, combinations_performance, calced, exact_match, hemming, accuracy,\
     count_total_average, macro_matrics, micro_matrics = _eval_model(log_fn, classes_, used_labels, json_in, predict_on_model, root_dir,
@@ -825,18 +832,24 @@ def eval_model(json_in, predict_on_model, root_dir, total_classes_count, prob_th
                                                                       macro_matrics[label][3])
         label_based_matrics += "\t\tCount: \t{}\t{:.4f}\n".format(None,
                                                                   macro_matrics[label][4])
+    return_marix = {}
     log_fn("exact_match: {}".format(exact_match/calced))
+    return_marix['exact_match'] = exact_match/calced
     log_fn("hemming:     {}".format(hemming/calced))
+    return_marix['hemming'] = hemming/calced
     log_fn("accuracy:    {}".format(accuracy/calced))
+    return_marix['accuracy'] = accuracy/calced
     log_fn("count total: {}".format(count_total_average))
+    return_marix['count_total'] = count_total_average
     log_fn("count sparse:{}".format(count_sparse_average))
+    return_marix['count_spare'] = count_sparse_average
     log_fn(label_based_matrics)
     for comb, vals in combinations_performance.items():
         try:
             log_fn("{} :{} ({})".format(comb, vals[0]/vals[1], vals[1]))
         except ZeroDivisionError:
             log_fn("{} : Irrelevent".format(comb))
-    return log_fn.file_path
+    return log_fn.file_path, return_marix
 
 def get_adjusted_count(count, count_total, class_out, prob_threshold = 0.1):
     calced_counts  = (count * count_total)#.round()
