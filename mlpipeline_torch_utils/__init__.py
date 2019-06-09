@@ -11,12 +11,12 @@ from tqdm import tqdm
 from mlpipeline.utils import add_script_dir_to_PATH
 from mlpipeline.utils import ExecutionModeKeys
 from mlpipeline.utils import Versions
-from mlpipeline.helper import Experiment
-from mlpipeline.helper import DataLoader
+from mlpipeline.base import ExperimentABC
+from mlpipeline.base import DataLoaderABC
 from mlpipeline.utils import version_parameters
 from mlpipeline.utils import log
 from mlpipeline.utils import console_colors
-from mlpipeline.utils import ModeKeys
+from mlpipeline.utils import ExperimentModeKeys
 
 try:
     import cv2
@@ -34,7 +34,7 @@ except ImportError:
     log("pytorch cannot be imported. Check for installation.", level = logging.WARN)
 
     
-class BaseTorchExperiment(Experiment):
+class BaseTorchExperiment(ExperimentABC):
     def __init__(self, versions, **args):
         super().__init__(versions, **args)
         self.model = None
@@ -178,6 +178,20 @@ class BaseTorchExperiment(Experiment):
             #loss_average.avg().data[0]))
         return "{}  {}".format(out_string_results, out_string_step)
 
+    def export_model(self, version):
+        self.load_history_checkpoint(self.get_ancient_checkpoint_file_name(0), False, True)
+        #confirmation = input("Do you want to export the model?: [y/N]")
+        self.log("Exporting model")
+        export_dir = export_model(self.model,
+                                  self.class_encoding,
+                                  self.dataloader.datasets.used_labels,
+                                  #self.dataloader.used_labels,
+                                  "exports_",
+                                  self.summery,
+                                  self.dataloader.summery)
+        self.copy_related_files(export_dir)
+        return export_dir
+    
     def save_checkpoint(self, epoc):
         directory = os.path.dirname(self.file_name)
         if not os.path.exists(directory):
@@ -195,16 +209,19 @@ class BaseTorchExperiment(Experiment):
             'epoch': epoc,
             'state_dict': self.model.state_dict(),
             'optimizer' : self.optimizer.state_dict(),
-            'validation': self.dataloader.valid_data_filtered,
+            'validation': self.dataloader.datasets.validation_dataset,
             'lr_scheduler': None if self.lr_scheduler is None else self.lr_scheduler.state_dict()
         }, self.file_name)
         self.log("Saved checkpoint for epoc: {} at {}".format(epoc + 1, self.file_name))
                     
-    def load_history_checkpoint(self, checkpoint_file_name, load_optimizer = True):
+    def load_history_checkpoint(self, checkpoint_file_name, load_optimizer = True, export_mode=False):
         self.log("Loading: {}".format(checkpoint_file_name), log_to_file = True)
         checkpoint = torch.load(checkpoint_file_name)
         self.epocs_params = checkpoint['epoch']
         self.model.load_state_dict(checkpoint['state_dict'])
+        if export_mode:
+            return
+
         if load_optimizer:
             self.optimizer.load_state_dict(checkpoint['optimizer'])
             if checkpoint['lr_scheduler'] is not None:
@@ -215,12 +232,12 @@ class BaseTorchExperiment(Experiment):
     def get_ancient_checkpoint_file_name(self, epoc_from_last = None):
         if epoc_from_last is None:
             epoc_from_last = self.save_history_checkpoints_count
-        elif epoc_from_last > self.save_history_checkpoints_count:
-            raise ValueError("`epoc_from_last` should be less than or equal `self.save_history_checkpoints_count`.")
         elif epoc_from_last == 0:
             history_file_name = self.history_file_name.format(0)
             if os.path.exists(history_file_name):
                 return history_file_name
+        elif epoc_from_last > self.save_history_checkpoints_count:
+            raise ValueError("`epoc_from_last` should be less than or equal `self.save_history_checkpoints_count`.")
             
         if self.save_history_checkpoints_count < 1:
             raise ValueError("save_history_checkpoints_count should be 1 or higher. Else set it to None to completely disable this feature.")
@@ -230,7 +247,7 @@ class BaseTorchExperiment(Experiment):
                 return history_file_name
 
 
-class Dataloader_multidataset(DataLoader):
+class Dataloader_multidataset(DataLoaderABC):
     def __init__(self,
                  dataloaders):
 
@@ -248,7 +265,7 @@ class Dataloader_multidataset(DataLoader):
             self.batch_size += dl.batch_size
             self.valid_data_filtered.append(dl.valid_data_filtered)
         
-    def get_train_input(self, mode= ModeKeys.TRAIN, **kargs):
+    def get_train_input(self, mode= ExecutionModeKeys.TRAIN, **kargs):
         return [dl.get_train_input(mode, **kargs) for dl in self.dataLoaders]
         
     def get_test_input(self, **kargs):
@@ -472,6 +489,7 @@ def export_model(model,
         'dataloader_summery': dataloader_summery
         },
         export_path_file)
+    return directory
 
 def crop_to_box(img, size):
     shape = img.shape
