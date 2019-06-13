@@ -5,7 +5,7 @@ import os
 import time
 import statistics
 import logging
-
+import pandas as pd
 from tqdm import tqdm
 
 from mlpipeline.utils import add_script_dir_to_PATH
@@ -556,18 +556,25 @@ def _eval_model(log_fn, classes, used_labels,
     combinations_performance = {k:[0,0] for k in combinations_performance}
     calced = 0
     i_ = 0
-    for idx,row in tqdm(enumerate(json_in)):
+    if isinstance(json_in, pd.DataFrame):
+        df_index = set(classes.keys()).intersection(json_in.columns)
+    for idx in tqdm(range(len(json_in)), total=len(json_in)):
         # if idx> 100:
         #     break
+        row = json_in.iloc[idx]
         if idx % 5000 == 0:
             # Added to give the hardware some breathing time to cool down
             time.sleep(3 * idx/10000)
-        f = row[0]
-        gt_labels = row[1]
+        if isinstance(row, pd.Series):
+            f = row['file_name']
+            gt_labels = row.loc[df_index].dropna().to_dict()
+        else:
+            f = row[0]
+            gt_labels = row[1]
         # This is when we are using images which do not have a label
         # Example: detecting negative classes
         if len(gt_labels) == 0:
-            gt_labels = {'None':0}
+            gt_labels = {'None': 0}
 
         # Testing if we are encountering any instances with no label
         # if encountered, and calc_negative_class not true, will raise exception?
