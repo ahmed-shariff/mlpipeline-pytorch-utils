@@ -5,6 +5,7 @@ import os
 import time
 import statistics
 import logging
+import shutil
 import pandas as pd
 from tqdm import tqdm
 
@@ -178,6 +179,10 @@ class BaseTorchExperiment(ExperimentABC):
             #loss_average.avg().data[0]))
         return "{}  {}".format(out_string_results, out_string_step)
 
+    def clean_model_dir(self, model_dir):
+        self.log("CLEANING MODEL DIR")
+        shutil.rmtree(model_dir, ignore_errors=True)
+    
     def export_model(self, version):
         self.load_history_checkpoint(self.get_ancient_checkpoint_file_name(0), False, True)
         #confirmation = input("Do you want to export the model?: [y/N]")
