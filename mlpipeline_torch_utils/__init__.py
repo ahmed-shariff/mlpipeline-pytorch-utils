@@ -46,16 +46,17 @@ class BaseTorchExperiment(ExperimentABC):
         self.checkpoint_saving_per_epoc = None
         self.use_cuda = None
         self.save_history_checkpoints_count = None
-        
+
+    def setup_model(self, version, experiment_dir):
+        self.history_file_name = "{}/model_params{}.tch".format(experiment_dir.rstrip("/"), "{}")
+        self.file_name = self.history_file_name.format(0)
 
     def pre_execution_hook(self, version, experiment_dir, exec_mode=ExecutionModeKeys.TEST):
         #print("Pre execution")
         print("Version spec: ", version)
         self.current_version = version
-        self.dataloader = self.current_version[version_parameters.DATALOADER]
-        self.dataloader.set_classes()
-        self.history_file_name = "{}/model_params{}.tch".format(experiment_dir.rstrip("/"), "{}")
-        self.file_name = self.history_file_name.format(0)
+        self.logging_iteration = 10
+        self.save_history_checkpoints_count = 10
         if os.path.isfile(self.file_name):
             self.log("Loading parameters from: {}".format(self.file_name))
             self.load_history_checkpoint(self.file_name)
