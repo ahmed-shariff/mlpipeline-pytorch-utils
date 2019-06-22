@@ -188,13 +188,16 @@ class BaseTorchExperiment(ExperimentABC):
         self.load_history_checkpoint(self.get_ancient_checkpoint_file_name(0), False, True)
         #confirmation = input("Do you want to export the model?: [y/N]")
         self.log("Exporting model")
+        sample_data = next(version[version_parameters.DATALOADER]().get_test_input().__iter__())
         export_dir = export_model(self.model,
                                   self.class_encoding,
                                   self.dataloader.datasets.used_labels,
                                   #self.dataloader.used_labels,
                                   "exports_",
                                   self.summery,
-                                  self.dataloader.summery)
+                                  self.dataloader.summery,
+                                  sample_data
+                                  )
         self.copy_related_files(export_dir)
         return export_dir
     
@@ -476,16 +479,20 @@ def export_model(model,
                  used_labels,
                  export_path,
                  model_summery,
-                 dataloader_summery):
-    export_path_file = "{}/{}/model_params.tch".format(export_path.rstrip("/"), time.time())
-    directory = os.path.dirname(export_path_file)
+                 dataloader_summery,
+                 sample_data):
+    directory = "{}/{}".format(export_path.rstrip("/"), time.time())
+    export_path_file = os.path.join(directory, "model_params.tch")
     if not os.path.exists(directory):
         os.makedirs(directory)
-    log("Exporting model to : {}".format(export_path_file), modifier_1 = console_colors.GREEN_FG)
+    else:
+        raise Exception("The directory {} already exists.".format(directory))
+    log("Exporting model to : {}".format(export_path_file), modifier_1=console_colors.GREEN_FG)
     log("-- Data codes mapping: {}".format(data_codes_mapping))
     log("-- Used labels: {}".format(used_labels))
     log("-- Model Summery: {}".format(model_summery))
     log("-- Dataloder Summery: {}".format(dataloader_summery))
+    log("-- Sample Data Shape: {}".format(sample_data.shape))
     torch.save({
         # 'model': model
         'state_dict': model.state_dict(),
@@ -495,6 +502,12 @@ def export_model(model,
         'dataloader_summery': dataloader_summery
         },
         export_path_file)
+    log("Exporting onnx model")
+    # Converting to CPI to make sure there is no device conflicts.
+    model = model.cpu()
+    torch.onnx.export(model,
+                      sample_data,
+                      os.path.join(directory, "model.onnx"))
     return directory
 
 def crop_to_box(img, size):
