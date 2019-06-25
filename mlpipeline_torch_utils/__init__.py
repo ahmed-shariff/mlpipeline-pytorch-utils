@@ -188,12 +188,12 @@ class BaseTorchExperiment(ExperimentABC):
         self.load_history_checkpoint(self.get_ancient_checkpoint_file_name(0), False, True)
         #confirmation = input("Do you want to export the model?: [y/N]")
         self.log("Exporting model")
-        sample_data = next(version[version_parameters.DATALOADER]().get_test_input().__iter__())
+        sample_data = next(version[version_parameters.DATALOADER]().get_test_input().__iter__())[0]
         export_dir = export_model(self.model,
                                   self.class_encoding,
                                   self.dataloader.datasets.used_labels,
                                   #self.dataloader.used_labels,
-                                  "exports_",
+                                  "models/exports",
                                   self.summery,
                                   self.dataloader.summery,
                                   sample_data
@@ -503,7 +503,7 @@ def export_model(model,
         },
         export_path_file)
     log("Exporting onnx model")
-    # Converting to CPI to make sure there is no device conflicts.
+    # Converting to CPU to make sure there is no device conflicts.
     model = model.cpu()
     torch.onnx.export(model,
                       sample_data,
