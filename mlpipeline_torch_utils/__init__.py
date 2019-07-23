@@ -180,24 +180,25 @@ class BaseTorchExperiment(ExperimentABC):
             #loss_average.avg().data[0]))
         return "{}  {}".format(out_string_results, out_string_step)
 
-    def clean_model_dir(self, model_dir):
+    def clean_experiment_dir(self, model_dir):
         self.log("CLEANING MODEL DIR")
         shutil.rmtree(model_dir, ignore_errors=True)
-    
+
     def export_model(self, version):
         self.load_history_checkpoint(self.get_ancient_checkpoint_file_name(0), False, True)
         #confirmation = input("Do you want to export the model?: [y/N]")
         self.log("Exporting model")
-        sample_data = next(version[version_parameters.DATALOADER]().get_test_input().__iter__())[0]
+        sample_data = next(self.dataloader.get_train_input().__iter__())[0]
+        assert isinstance(sample_data, torch.Tensor)
         export_dir = export_model(self.model,
-                                  self.class_encoding,
+                                  self.dataloader.datasets.class_encoding,
                                   self.dataloader.datasets.used_labels,
                                   #self.dataloader.used_labels,
                                   "models/exports",
                                   self.summery,
                                   self.dataloader.summery,
-                                  sample_data
-                                  )
+                                  sample_data,
+                                  self.history_file_name.split("/")[-2])
         self.copy_related_files(export_dir)
         return export_dir
     
@@ -480,7 +481,8 @@ def export_model(model,
                  export_path,
                  model_summery,
                  dataloader_summery,
-                 sample_data):
+                 sample_data,
+                 name_prefix=None):
     directory = "{}/{}".format(export_path.rstrip("/"), time.time())
     export_path_file = os.path.join(directory, "model_params.tch")
     if not os.path.exists(directory):
