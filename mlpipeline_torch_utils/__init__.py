@@ -47,14 +47,14 @@ class BaseTorchExperiment(ExperimentABC):
         self.use_cuda = None
         self.save_history_checkpoints_count = None
 
-    def setup_model(self, version, experiment_dir):
-        self.history_file_name = "{}/model_params{}.tch".format(experiment_dir.rstrip("/"), "{}")
+    def setup_model(self):
+        self.history_file_name = "{}/model_params{}.tch".format(self.experiment_dir.rstrip("/"), "{}")
         self.file_name = self.history_file_name.format(0)
 
-    def pre_execution_hook(self, version, experiment_dir, exec_mode=ExecutionModeKeys.TEST):
+    def pre_execution_hook(self, mode=ExecutionModeKeys.TEST):
         #print("Pre execution")
-        print("Version spec: ", version)
-        self.current_version = version
+        print("Version spec: ", self.current_version)
+        self.current_version = self.current_version
         self.logging_iteration = 10
         self.save_history_checkpoints_count = 10
         if os.path.isfile(self.file_name):
