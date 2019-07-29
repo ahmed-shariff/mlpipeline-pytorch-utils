@@ -10,14 +10,14 @@ import pandas as pd
 from tqdm import tqdm
 
 from mlpipeline.utils import add_script_dir_to_PATH
-from mlpipeline.utils import ExecutionModeKeys
-from mlpipeline.utils import Versions
+from mlpipeline.entities import ExecutionModeKeys
+from mlpipeline import Versions
 from mlpipeline.base import ExperimentABC
 from mlpipeline.base import DataLoaderABC
-from mlpipeline.utils import version_parameters
-from mlpipeline.utils import log
-from mlpipeline.utils import console_colors
-from mlpipeline.utils import ExperimentModeKeys
+from mlpipeline.entities import version_parameters
+from mlpipeline import log
+from mlpipeline.entities import console_colors
+from mlpipeline.entities import ExperimentModeKeys
 
 try:
     import cv2
