@@ -430,51 +430,6 @@ def accuracy_logits(output, labels, topk):
     return t1, tk, labels.size(0)
 
 
-def accuracy_multiclass_hamming_loss(output, target, threshold = 0.75):
-    output = output > threshold
-    hamming_count = torch.sum(output != target.byte())
-    hamming_total = target.size(0) * target.size(1)
-    return hamming_count, hamming_total
-
-def accuracy_multiclass(output, target, threshold = 0.75):
-    output = output > threshold
-    temp = output+target.byte()
-    intersection = torch.sum(temp == 2, 1)
-    #union = torch.sum(temp > 0, 1)
-    length = torch.sum(target, 1)
-    non_zero_targets = length != 0 
-    return torch.sum(intersection[non_zero_targets].float()/length[non_zero_targets].float()), target.size(0)
-    
-
-def accuracy_class_counts(output, labels, selecting_target=None):
-    output_round = output.round()
-    t1 = 0
-    
-    if selecting_target is None:
-        dense_idx = labels != 0
-        result = output_round[dense_idx].eq(labels[dense_idx])
-        t1 = result.sum().item()
-        tot = dense_idx.sum().item()
-    #TODO: correct this also to be used with multilabels settings    
-    else:
-        dense_idx = selecting_target
-        for i, idx in enumerate(dense_idx):
-            if output_round[i][idx] == labels[i]:
-                t1 += 1
-        tot = labels.size(0)
-    return t1, tot
-
-def accuracy_counts(output, labels):
-    top1 = []
-    top1 = output[:,0].round().eq(labels)
-    
-    try:
-        t1 = top1.nonzero().size(0)
-    except RuntimeError as e:
-        print(e)
-        t1 = 0
-    return t1, labels.size(0)
-
 def export_model(model,
                  data_codes_mapping,
                  used_labels,
@@ -929,4 +884,74 @@ return recall, prceision, accuracy, accuracy without counting the true
     except:
         acc = 0
     return recall, precesion, acc, acc_non_tn
-    
+
+
+def accuracy_multilabel_hamming_loss(output, target, threshold=0.75):
+    output = output > threshold
+    hamming_count = torch.sum(output != target.byte())
+    hamming_total = target.size(0) * target.size(1)
+    return hamming_count, hamming_total
+
+
+def accuracy_multilabel(output, target, threshold=0.75):
+    output = output > threshold
+    temp = output+target.byte()
+    intersection = torch.sum(temp == 2, 1)
+    union = torch.sum(temp > 0, 1)
+    return torch.sum(intersection.float()/union.float()), target.size(0)
+
+
+def recall(output, target, threshold=0.75):
+    output = output > threshold
+    temp = output+target.byte()
+    intersection = torch.sum(temp == 2, 1)
+    length = torch.sum(target, 1)
+    non_zero_targets = length != 0
+    return torch.sum(intersection[non_zero_targets].float()/length[non_zero_targets].float()), target.size(0)
+
+
+def precision(output, target, threshold=0.75):
+    output = output > threshold
+    temp = output+target.byte()
+    intersection = torch.sum(temp == 2, 1)
+    length = torch.sum(output, 1)
+    non_zero_targets = length != 0
+    return torch.sum(intersection[non_zero_targets].float()/length[non_zero_targets].float()), target.size(0)
+
+
+def accuracy_multilabel_exact_match(output, target, threshold=0.75):
+    output = output > threshold
+    temp = torch.sum(output == target.byte(), 1)
+    temp = temp == output.size(1)
+    return torch.sum(temp.float()), target.size(0)
+
+
+def accuracy_class_counts(output, labels, selecting_target=None):
+    output_round = output.round()
+    t1 = 0
+
+    if selecting_target is None:
+        dense_idx = labels != 0
+        result = output_round[dense_idx].eq(labels[dense_idx])
+        t1 = result.sum().item()
+        tot = dense_idx.sum().item()
+    #TODO: correct this also to be used with multilabels settings
+    else:
+        dense_idx = selecting_target
+        for i, idx in enumerate(dense_idx):
+            if output_round[i][idx] == labels[i]:
+                t1 += 1
+        tot = labels.size(0)
+    return t1, tot
+
+
+def accuracy_counts(output, labels):
+    top1 = []
+    top1 = output.round().eq(labels)
+
+    try:
+        t1 = top1.nonzero().size(0)
+    except RuntimeError as e:
+        print(e)
+        t1 = 0
+    return t1, labels.size(0)
